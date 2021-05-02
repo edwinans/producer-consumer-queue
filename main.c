@@ -9,6 +9,7 @@
 pthread_t producers[TH_SZ];
 pthread_t consumers[TH_SZ];
 pthread_mutex_t q_lock;
+pthread_mutex_t counter_lock;
 
 //create an empty queue
 queue *create_queue(size_t c)
@@ -47,7 +48,6 @@ int enqueue(queue *f, char *s)
     {
         f->tail = p;
         f->head = p;
-        f->head->next = f->tail;
     }
     else
     {
@@ -70,10 +70,15 @@ packet *dequeue(queue *f)
     }
     packet *hd = f->head;
     f->head = f->head->next;
+    if (f->head == NULL)
+        f->tail = NULL;
+
     f->size--;
+
     return hd;
 }
 
+//destory the queue
 int free_queue(queue *f)
 {
     packet *cur = f->head;
@@ -82,16 +87,18 @@ int free_queue(queue *f)
     while (cur)
     {
         next = cur->next;
+        free(cur->val);
         free(cur);
         cur = next;
     }
 }
 
+//print the queue
 void print_queue(queue *f)
 {
     pthread_mutex_lock(&q_lock);
     packet *cur = f->head;
-    printf("[");
+    printf("queue: [");
     while (cur)
     {
         printf("%s ", cur->val);
@@ -101,9 +108,10 @@ void print_queue(queue *f)
     pthread_mutex_unlock(&q_lock);
 }
 
+///////////////////////////////QUEUE//////////////////////////////////////
+
 void *produce(void *arg)
 {
-
     s_target *param = (s_target *)arg;
     queue *buf = param->buf;
     char *name = param->name;
@@ -113,7 +121,8 @@ void *produce(void *arg)
 
     while (i < t)
     {
-        char s[MAX_STR] = {0};
+        // char s[MAX_STR] = "";
+        char *s = malloc(sizeof(char) * MAX_STR);
         sprintf(s, "%s %d", name, i + 1);
 
         pthread_mutex_lock(&q_lock);
@@ -130,7 +139,6 @@ void *produce(void *arg)
             printf("produce : %s\n", s);
         }
 
-        // printf("queue: ");
         // print_queue(buf);
     }
 }
@@ -145,7 +153,7 @@ void *consume(void *arg)
         pthread_mutex_lock(&q_lock);
         packet *p = dequeue(buf);
         pthread_mutex_unlock(&q_lock);
-        
+
         if (p == NULL)
         {
             sleep(2);
@@ -153,7 +161,9 @@ void *consume(void *arg)
         else
         {
             printf("C%d mange %s\n", id, p->val);
+            pthread_mutex_lock(&counter_lock);
             (*cons->counter)--;
+            pthread_mutex_unlock(&counter_lock);
         }
     }
 }
@@ -180,26 +190,25 @@ void *init_queue(void *nothing)
     }
 
     int counter = n * produce_target;
-    int *counter_ref = &counter;
 
     for (int i = 0; i < m; i++)
     {
 
         consumer *args = malloc(sizeof(consumer));
         args->id = i + 1;
-        args->counter = counter_ref;
+        args->counter = &counter;
         args->buf = buf;
 
         pthread_create(&consumers[i], NULL, consume, args);
     }
 
-    for (int i = 0; i < TH_SZ; i++)
-    {
-        pthread_join(consumers[i], NULL);
-        pthread_join(producers[i], NULL);
-    }
+    // for (int i = 0; i < TH_SZ; i++)
+    // {
+    //     pthread_join(consumers[i], NULL);
+    //     pthread_join(producers[i], NULL);
+    // }
 
-    while (*counter_ref)
+    while (counter)
     {
     }
 
@@ -216,6 +225,22 @@ int main(int argc, char const *argv[])
     pthread_create(&th_main, NULL, init_queue, NULL);
 
     pthread_join(th_main, NULL);
+
+    // queue *q = create_queue(6);
+    // enqueue(q, "x1");
+    // print_queue(q);
+
+    // enqueue(q, "x2");
+    // print_queue(q);
+    // dequeue(q);
+    // dequeue(q);
+
+    // enqueue(q, "x3");
+
+    // print_queue(q);
+
+    // dequeue(q);
+    // print_queue(q);
 
     return EXIT_SUCCESS;
 }
