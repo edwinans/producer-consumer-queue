@@ -6,6 +6,9 @@
 #include <string.h>
 #include "main.h"
 
+#define DEBUG 0
+
+pthread_t th_main;
 pthread_t producers[TH_SZ];
 pthread_t consumers[TH_SZ];
 pthread_mutex_t q_lock;
@@ -14,24 +17,24 @@ pthread_mutex_t counter_lock;
 //create an empty queue
 queue *create_queue(size_t c)
 {
-    queue *f = malloc(sizeof(queue));
-    if (f == NULL)
+    queue *q = malloc(sizeof(queue));
+    if (q == NULL)
     {
         printf("error create: malloc failed\n");
         return NULL;
     }
-    f->head = NULL;
-    f->tail = NULL;
-    f->size = 0;
-    f->cap = c;
+    q->head = NULL;
+    q->tail = NULL;
+    q->size = 0;
+    q->cap = c;
 }
 
 //return -1 if cap>size
-int enqueue(queue *f, char *s)
+int enqueue(queue *q, char *s)
 {
 
-    //cap atteinte
-    if (f->cap <= f->size)
+    //cap full
+    if (q->cap <= q->size)
         return -1;
 
     packet *p = malloc(sizeof(packet));
@@ -44,44 +47,44 @@ int enqueue(queue *f, char *s)
 
     p->val = s;
 
-    if (f->tail == NULL)
+    if (q->tail == NULL)
     {
-        f->tail = p;
-        f->head = p;
+        q->head = p;
     }
     else
     {
-        f->tail->next = p;
-        f->tail = p;
+        q->tail->next = p;
     }
 
-    f->size++;
+    q->tail = p;
+    q->size++;
 
     return 0;
 }
 
 //return NULL if f is empty
-packet *dequeue(queue *f)
+packet *dequeue(queue *q)
 {
-    if (f == NULL || f->head == NULL)
+    if (q == NULL || q->head == NULL)
     {
         printf("error dequeue: the queue is empty\n");
         return NULL;
     }
-    packet *hd = f->head;
-    f->head = f->head->next;
-    if (f->head == NULL)
-        f->tail = NULL;
+    packet *hd = q->head;
+    q->head = q->head->next;
 
-    f->size--;
+    if (q->head == NULL)
+        q->tail = NULL;
+
+    q->size--;
 
     return hd;
 }
 
 //destory the queue
-int free_queue(queue *f)
+int free_queue(queue *q)
 {
-    packet *cur = f->head;
+    packet *cur = q->head;
     packet *next;
 
     while (cur)
@@ -91,13 +94,15 @@ int free_queue(queue *f)
         free(cur);
         cur = next;
     }
+
+    free(q);
 }
 
 //print the queue
-void print_queue(queue *f)
+void print_queue(queue *q)
 {
     pthread_mutex_lock(&q_lock);
-    packet *cur = f->head;
+    packet *cur = q->head;
     printf("queue: [");
     while (cur)
     {
@@ -106,6 +111,27 @@ void print_queue(queue *f)
     }
     printf("]\n");
     pthread_mutex_unlock(&q_lock);
+}
+
+void test_queue()
+{
+    queue *q = create_queue(6);
+    enqueue(q, "x1");
+    print_queue(q);
+
+    enqueue(q, "x2");
+    print_queue(q);
+    dequeue(q);
+    dequeue(q);
+
+    enqueue(q, "x3");
+
+    print_queue(q);
+
+    dequeue(q);
+    print_queue(q);
+
+    free_queue(q);
 }
 
 ///////////////////////////////QUEUE//////////////////////////////////////
@@ -121,7 +147,6 @@ void *produce(void *arg)
 
     while (i < t)
     {
-        // char s[MAX_STR] = "";
         char *s = malloc(sizeof(char) * MAX_STR);
         sprintf(s, "%s %d", name, i + 1);
 
@@ -171,8 +196,8 @@ void *consume(void *arg)
 // n = number of producers, m = number of consumers
 void *init_queue(void *nothing)
 {
-    int n = 3, m = 2;
-    int cap = 5;
+    int n = 5, m = 4;
+    int cap = 3;
     char *names[] = {"Apple", "BlackBerry", "Snack", "Mango", "Orange"};
     int produce_target = 3;
 
@@ -202,23 +227,14 @@ void *init_queue(void *nothing)
         pthread_create(&consumers[i], NULL, consume, args);
     }
 
-    // for (int i = 0; i < TH_SZ; i++)
-    // {
-    //     pthread_join(consumers[i], NULL);
-    //     pthread_join(producers[i], NULL);
-    // }
-
     while (counter)
     {
     }
 
     free_queue(buf);
-    exit(0);
 
-    // print_queue(buf);
+    return 0;
 }
-
-pthread_t th_main;
 
 int main(int argc, char const *argv[])
 {
@@ -226,21 +242,9 @@ int main(int argc, char const *argv[])
 
     pthread_join(th_main, NULL);
 
-    // queue *q = create_queue(6);
-    // enqueue(q, "x1");
-    // print_queue(q);
-
-    // enqueue(q, "x2");
-    // print_queue(q);
-    // dequeue(q);
-    // dequeue(q);
-
-    // enqueue(q, "x3");
-
-    // print_queue(q);
-
-    // dequeue(q);
-    // print_queue(q);
-
+    if (DEBUG)
+    {
+        test_queue();
+    }
     return EXIT_SUCCESS;
 }
