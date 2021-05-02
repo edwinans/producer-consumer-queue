@@ -1,3 +1,8 @@
+/*
+    TME1
+    @author Edwin Ansari
+*/
+
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdlib.h>
